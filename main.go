@@ -35,8 +35,9 @@ func main() {
 		log.Fatalf("Can't set up DB: %v", err)
 	}
 
-	http.HandleFunc("/get", get)
-	http.HandleFunc("/create", create)
+	// Versioning is useful in case we get fancier later, like actually having accounts
+	http.HandleFunc("/v1/get", get)
+	http.HandleFunc("/v1/create", create)
 	// TODO List
 
 	log.Print("Serving on localhost:8080")
@@ -71,6 +72,9 @@ func initDB() (*serverType, error) {
 }
 
 func get(resp http.ResponseWriter, req *http.Request) {
+	// TODO Actually be careful with CORS
+	resp.Header().Set("Access-Control-Allow-Origin", "*")
+
 	values, ok := req.URL.Query()["id"]
 	if !ok || len(values[0]) < 1 {
 		http.Error(resp, "missing ID param", http.StatusBadRequest)
@@ -88,6 +92,8 @@ func get(resp http.ResponseWriter, req *http.Request) {
 }
 
 func create(resp http.ResponseWriter, req *http.Request) {
+	resp.Header().Set("Access-Control-Allow-Origin", "*")
+
 	rawJSON, mapName, err := validateJSON(req.Body)
 	if err != nil {
 		// TODO Also log errors
