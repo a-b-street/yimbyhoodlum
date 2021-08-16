@@ -71,8 +71,12 @@ func initDB() (*serverType, error) {
 }
 
 func get(resp http.ResponseWriter, req *http.Request) {
-	// TODO Fail gracefully if the GET param is missing/blank
-	id := req.URL.Query().Get("id")[0]
+	values, ok := req.URL.Query()["id"]
+	if !ok || len(values[0]) < 1 {
+		http.Error(resp, "missing ID param", http.StatusBadRequest)
+		return
+	}
+	id := values[0]
 	var json []byte
 	if err := server.getStmt.QueryRow(id).Scan(&json); err != nil {
 		// TODO Also log errors
@@ -99,9 +103,10 @@ func create(resp http.ResponseWriter, req *http.Request) {
 		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Uploaded new proposal for %v: %v", mapName, id)
 
 	// Return the UUID, so the user can share their masterpiece
-	fmt.Println(resp, "%v", id)
+	fmt.Fprintf(resp, "%v", id)
 }
 
 // Verifies the input is MapEdits JSON. Returns the raw JSON and extracts the map name.
@@ -111,30 +116,32 @@ func validateJSON(input io.Reader) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
+	rawJson := buffer.Bytes()
 
+	// Extract the map name from the JSON
 	var edits mapEdits
-	if err := json.NewDecoder(&buffer).Decode(&edits); err != nil {
+	if err := json.Unmarshal(rawJson, &edits); err != nil {
 		return nil, "", err
 	}
 
-	return buffer.Bytes(), edits.name.path(), nil
+	return rawJson, edits.Name.path(), nil
 }
 
 type mapEdits struct {
-	name mapName `json:"map_name"`
+	Name mapName `json:"map_name"`
 	// We're not going to validate the other fields
 }
 
 type mapName struct {
-	city    cityName
-	mapName string `json:"map"`
+	City    cityName
+	MapName string `json:"map"`
 }
 
 type cityName struct {
-	country string
-	city    string
+	Country string
+	City    string
 }
 
 func (n *mapName) path() string {
-	return fmt.Sprintf("%v/%v/%v", n.city.country, n.city.city, n.mapName)
+	return fmt.Sprintf("%v/%v/%v", n.City.Country, n.City.City, n.MapName)
 }
