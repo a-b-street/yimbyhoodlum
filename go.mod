@@ -2,4 +2,7 @@ module abstreet.org/yimbyhoodlum
 
 go 1.16
 
-require github.com/mattn/go-sqlite3 v1.14.8 // indirect
+require (
+	github.com/google/uuid v1.3.0 // indirect
+	github.com/mattn/go-sqlite3 v1.14.8 // indirect
+)

@@ -1,11 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	_ "embed"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -78,4 +84,57 @@ func get(resp http.ResponseWriter, req *http.Request) {
 }
 
 func create(resp http.ResponseWriter, req *http.Request) {
+	rawJSON, mapName, err := validateJSON(req.Body)
+	if err != nil {
+		// TODO Also log errors
+		http.Error(resp, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// In the unlikely event of UUID collision, should the retry loop live here?
+	id := uuid.New().String()
+	moderated := 0
+	time := time.Now().Unix()
+	if _, err := server.createStmt.Exec(id, mapName, rawJSON, moderated, time); err != nil {
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Return the UUID, so the user can share their masterpiece
+	fmt.Println(resp, "%v", id)
+}
+
+// Verifies the input is MapEdits JSON. Returns the raw JSON and extracts the map name.
+func validateJSON(input io.Reader) ([]byte, string, error) {
+	var buffer bytes.Buffer
+	_, err := buffer.ReadFrom(input)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var edits mapEdits
+	if err := json.NewDecoder(&buffer).Decode(&edits); err != nil {
+		return nil, "", err
+	}
+
+	return buffer.Bytes(), edits.name.path(), nil
+}
+
+type mapEdits struct {
+	name mapName `json:"map_name"`
+	// We're not going to validate the other fields
+}
+
+type mapName struct {
+	city    cityName
+	mapName string `json:"map"`
+}
+
+type cityName struct {
+	country string
+	city    string
+}
+
+func (n *mapName) path() string {
+	return fmt.Sprintf("%v/%v/%v", n.city.country, n.city.city, n.mapName)
 }
