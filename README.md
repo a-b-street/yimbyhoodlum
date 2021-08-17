@@ -41,7 +41,14 @@ abuse mitigation somewhere.
 
 ## Development notes
 
-To run locally, you need SQLite and Go. Just do `go run main.go`.
+To run locally, you need Go and MySQL running somewhere. Docker is easiest for
+running the DB. You also need the MySQL client.
+
+- Start MySQL: `docker run -p 3306:3306 --name yimbysql -e MYSQL_ROOT_PASSWORD=password -d mysql:5.7`
+- Add a blank DB: `mysql -u root -ppassword -h 0.0.0.0 -P 3306 -e 'CREATE DATABASE dev'`
+- Start the GO server: `MYSQL_URI='root:password@tcp(0.0.0.0:3306)/dev' go run main.go`
+- To debug, you can grab container logs: `docker logs yimbysql`
+- To teardown: `docker rm --force yimbysql`
 
 I wish setting up GAE and Cloud SQL was more declarative / reproducible. I
 didn't hit any snags following various bits of documentation and using the

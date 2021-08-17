@@ -14,7 +14,6 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
-	_ "github.com/mattn/go-sqlite3"
 )
 
 var (
@@ -37,7 +36,7 @@ func main() {
 	}
 
 	var err error
-	server, err = initDB(os.Getenv("CLOUDSQL_URI"))
+	server, err = initDB(os.Getenv("MYSQL_URI"))
 	if err != nil {
 		log.Fatalf("Can't set up DB: %v", err)
 	}
@@ -52,15 +51,12 @@ func main() {
 }
 
 func initDB(mysqlURI string) (*serverType, error) {
-	var db *sql.DB
-	var err error
 	if mysqlURI == "" {
-		log.Print("Setting up local SQLite DB")
-		db, err = sql.Open("sqlite3", "dev_proposals.db")
-	} else {
-		log.Printf("Connecting to Cloud SQL: %v", mysqlURI)
-		db, err = sql.Open("mysql", mysqlURI)
+		log.Fatalf("You must set the MYSQL_URI env variable")
 	}
+
+	log.Printf("Connecting to %v", mysqlURI)
+	db, err := sql.Open("mysql", mysqlURI)
 	if err != nil {
 		return nil, err
 	}
