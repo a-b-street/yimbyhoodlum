@@ -42,3 +42,10 @@ abuse mitigation somewhere.
 ## Development notes
 
 To run locally, you need SQLite and Go. Just do `go run main.go`.
+
+I wish setting up GAE and Cloud SQL was more declarative / reproducible. I
+didn't hit any snags following various bits of documentation and using the
+console, so not saying much here. `gcloud app deploy`, then fiddle around with
+logs. The only trick is that app.yaml isn't under version control, because
+seemingly I have to copy the MySQL root password there? There's definitely a
+way to make IAM work out here, but it's not obvious from docs.

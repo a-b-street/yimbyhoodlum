@@ -9,8 +9,10 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
+	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -29,8 +31,13 @@ type serverType struct {
 }
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
 	var err error
-	server, err = initDB()
+	server, err = initDB(os.Getenv("CLOUDSQL_URI"))
 	if err != nil {
 		log.Fatalf("Can't set up DB: %v", err)
 	}
@@ -40,18 +47,25 @@ func main() {
 	http.HandleFunc("/v1/create", create)
 	// TODO List
 
-	log.Print("Serving on localhost:8080")
-	http.ListenAndServe(":8080", nil)
+	log.Printf("Serving on port %v", port)
+	http.ListenAndServe(":"+port, nil)
 }
 
-func initDB() (*serverType, error) {
-	db, err := sql.Open("sqlite3", "dev_proposals.db")
+func initDB(mysqlURI string) (*serverType, error) {
+	var db *sql.DB
+	var err error
+	if mysqlURI == "" {
+		log.Print("Setting up local SQLite DB")
+		db, err = sql.Open("sqlite3", "dev_proposals.db")
+	} else {
+		log.Printf("Connecting to Cloud SQL: %v", mysqlURI)
+		db, err = sql.Open("mysql", mysqlURI)
+	}
 	if err != nil {
 		return nil, err
 	}
 
 	// Create the table, if needed
-	log.Print("Setting up DB")
 	_, err = db.Exec(createTable)
 	if err != nil {
 		return nil, err
