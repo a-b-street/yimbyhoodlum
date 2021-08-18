@@ -93,7 +93,7 @@ func get(resp http.ResponseWriter, req *http.Request) {
 	id := values[0]
 	var json []byte
 	if err := server.getStmt.QueryRow(id).Scan(&json); err != nil {
-		// TODO Also log errors
+		log.Printf("Couldn't get %v: %v", id, err)
 		http.Error(resp, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -106,7 +106,7 @@ func create(resp http.ResponseWriter, req *http.Request) {
 
 	rawJSON, mapName, err := validateJSON(req.Body)
 	if err != nil {
-		// TODO Also log errors
+		log.Printf("Invalid JSON in create call: %v", err)
 		http.Error(resp, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -117,6 +117,7 @@ func create(resp http.ResponseWriter, req *http.Request) {
 	moderated := 0
 	time := time.Now().Unix()
 	if _, err := server.createStmt.Exec(id, mapName, rawJSON, moderated, time); err != nil {
+		log.Printf("Couldn't create new proposal: %v", err)
 		// TODO If the proposal already existed, don't return an error!
 		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
