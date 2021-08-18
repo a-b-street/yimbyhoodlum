@@ -1,6 +1,6 @@
 CREATE TABLE IF NOT EXISTS proposals (
-	-- A UUID
-	id VARCHAR(36) PRIMARY KEY,
+	-- The md5sum of the JSON blob
+	id VARCHAR(32) PRIMARY KEY,
 	-- In the "us/seattle/udistrict" form
 	map_name TEXT NOT NULL CHECK(length(map_name) < 50),
 	-- The MapEdits JSON blob, max 16MB

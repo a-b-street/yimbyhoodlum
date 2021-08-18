@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"database/sql"
 	_ "embed"
 	"encoding/json"
@@ -13,7 +14,6 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/google/uuid"
 )
 
 var (
@@ -111,11 +111,13 @@ func create(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// In the unlikely event of UUID collision, should the retry loop live here?
-	id := uuid.New().String()
+	// The ID is the md5sum of the JSON string
+	id := fmt.Sprintf("%x", md5.Sum(rawJSON))
+
 	moderated := 0
 	time := time.Now().Unix()
 	if _, err := server.createStmt.Exec(id, mapName, rawJSON, moderated, time); err != nil {
+		// TODO If the proposal already existed, don't return an error!
 		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
