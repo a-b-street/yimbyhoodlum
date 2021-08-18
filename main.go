@@ -13,7 +13,7 @@ import (
 	"os"
 	"time"
 
-	_ "github.com/go-sql-driver/mysql"
+	"github.com/go-sql-driver/mysql"
 )
 
 var (
@@ -117,6 +117,13 @@ func create(resp http.ResponseWriter, req *http.Request) {
 	moderated := 0
 	time := time.Now().Unix()
 	if _, err := server.createStmt.Exec(id, mapName, rawJSON, moderated, time); err != nil {
+		if driverErr, ok := err.(*mysql.MySQLError); ok && driverErr.Number == 1062 {
+			// Act idempotent if the same proposal is uploaded twice, instead of throwing an error.
+			log.Printf("Proposal for %v already uploaded previously: %v", mapName, id)
+			fmt.Fprintf(resp, "%v", id)
+			return
+		}
+
 		log.Printf("Couldn't create new proposal: %v", err)
 		// TODO If the proposal already existed, don't return an error!
 		http.Error(resp, err.Error(), http.StatusInternalServerError)
@@ -124,7 +131,8 @@ func create(resp http.ResponseWriter, req *http.Request) {
 	}
 	log.Printf("Uploaded new proposal for %v: %v", mapName, id)
 
-	// Return the UUID, so the user can share their masterpiece
+	// Return the ID, so the user can share their masterpiece. (They can
+	// calculate it anyway with md5sum, but still useful.)
 	fmt.Fprintf(resp, "%v", id)
 }
 
