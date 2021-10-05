@@ -2,32 +2,20 @@ package main
 
 import (
 	"bytes"
+	"cloud.google.com/go/storage"
+	"context"
 	"crypto/md5"
-	"database/sql"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
-	"time"
-
-	"github.com/go-sql-driver/mysql"
 )
 
-var (
-	//go:embed proposals.sql
-	createTable string
+var client *storage.Client
 
-	server *serverType
-)
-
-type serverType struct {
-	db         *sql.DB
-	getStmt    *sql.Stmt
-	createStmt *sql.Stmt
-}
+const bucket = "aorta-routes.appspot.com"
 
 func main() {
 	port := os.Getenv("PORT")
@@ -36,9 +24,10 @@ func main() {
 	}
 
 	var err error
-	server, err = initDB(os.Getenv("MYSQL_URI"))
+	// This magically pulls credentials from AppEngine
+	client, err = storage.NewClient(context.Background())
 	if err != nil {
-		log.Fatalf("Can't set up DB: %v", err)
+		log.Fatalf("Can't set up GCS client: %v", err)
 	}
 
 	// Versioning is useful in case we get fancier later, like actually having accounts
@@ -48,37 +37,6 @@ func main() {
 
 	log.Printf("Serving on port %v", port)
 	http.ListenAndServe(":"+port, nil)
-}
-
-func initDB(mysqlURI string) (*serverType, error) {
-	if mysqlURI == "" {
-		log.Fatalf("You must set the MYSQL_URI env variable")
-	}
-
-	log.Printf("Connecting to %v", mysqlURI)
-	db, err := sql.Open("mysql", mysqlURI)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the table, if needed
-	_, err = db.Exec(createTable)
-	if err != nil {
-		return nil, err
-	}
-
-	// Prepare statements guard against SQL injection
-	getStmt, err := db.Prepare("SELECT json FROM proposals WHERE id = ?")
-	if err != nil {
-		return nil, err
-	}
-
-	createStmt, err := db.Prepare("INSERT INTO proposals (id, map_name, json, moderated, time) VALUES (?, ?, ?, ?, ?)")
-	if err != nil {
-		return nil, err
-	}
-
-	return &serverType{db, getStmt, createStmt}, nil
 }
 
 func get(resp http.ResponseWriter, req *http.Request) {
@@ -91,14 +49,19 @@ func get(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 	id := values[0]
-	var json []byte
-	if err := server.getStmt.QueryRow(id).Scan(&json); err != nil {
-		log.Printf("Couldn't get %v: %v", id, err)
-		http.Error(resp, err.Error(), http.StatusNotFound)
+
+	// TODO Do we need to sanitize the input?
+	obj := client.Bucket(bucket).Object(fmt.Sprintf("proposals/%v", id))
+	r, err := obj.NewReader(context.Background())
+	if err != nil {
+		http.Error(resp, fmt.Sprintf("new reader failed: %v", err), http.StatusInternalServerError)
 		return
 	}
-	// TODO Check error
-	resp.Write(json)
+	defer r.Close()
+	if _, err := io.Copy(resp, r); err != nil {
+		http.Error(resp, fmt.Sprintf("reading failed: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 func create(resp http.ResponseWriter, req *http.Request) {
@@ -111,29 +74,23 @@ func create(resp http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// The ID is the md5sum of the JSON string
-	id := fmt.Sprintf("%x", md5.Sum(rawJSON))
-
-	moderated := 0
-	time := time.Now().Unix()
-	if _, err := server.createStmt.Exec(id, mapName, rawJSON, moderated, time); err != nil {
-		if driverErr, ok := err.(*mysql.MySQLError); ok && driverErr.Number == 1062 {
-			// Act idempotent if the same proposal is uploaded twice, instead of throwing an error.
-			log.Printf("Proposal for %v already uploaded previously: %v", mapName, id)
-			fmt.Fprintf(resp, "%v", id)
-			return
-		}
-
-		log.Printf("Couldn't create new proposal: %v", err)
-		// TODO If the proposal already existed, don't return an error!
-		http.Error(resp, err.Error(), http.StatusInternalServerError)
+	checksum := fmt.Sprintf("%x", md5.Sum(rawJSON))
+	// If the proposal already exists, overwriting it with the same thing will be idempotent.
+	obj := client.Bucket(bucket).Object(fmt.Sprintf("proposals/%v", checksum))
+	w := obj.NewWriter(context.Background())
+	if _, err := w.Write(rawJSON); err != nil {
+		http.Error(resp, fmt.Sprintf("writing failed: %v", err), http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Uploaded new proposal for %v: %v", mapName, id)
+	if err := w.Close(); err != nil {
+		http.Error(resp, fmt.Sprintf("closing after write failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Uploaded new proposal for %v: %v", mapName, checksum)
 
-	// Return the ID, so the user can share their masterpiece. (They can
-	// calculate it anyway with md5sum, but still useful.)
-	fmt.Fprintf(resp, "%v", id)
+	// Return the checksum, so the user can share their masterpiece. (They
+	// can calculate it anyway with md5sum, but still useful.)
+	fmt.Fprintf(resp, "%v", checksum)
 }
 
 // Verifies the input is MapEdits JSON. Returns the raw JSON and extracts the map name.

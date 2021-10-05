@@ -25,11 +25,9 @@ Proposals are recorded onto a blockchain and simulated using homomorphic
 encryption, with the results being implemented in a digital twin governed by
 smart contracts.
 
-Ehem, by which I mean, there's just a single-table SQL database and a tiny Go
-server to submit proposals, fetch them by ID, and browse moderated ones.
-
-For local development, just using SQLite. Probably going to deploy on App
-Engine with Cloud SQL, or equivalent.
+Ehem, by which I mean, each proposal is just a tiny file in a Google Cloud
+Storage bucket, and a tiny Go server to submit proposals and fetch them by
+checksum, deployed to App Engine.
 
 ## Concerns
 
@@ -41,18 +39,8 @@ abuse mitigation somewhere.
 
 ## Development notes
 
-To run locally, you need Go and MySQL running somewhere. Docker is easiest for
-running the DB. You also need the MySQL client.
+I haven't worked out how to glue the Go client library up to the same local
+credentials that `gsutil` uses, so no local development. `gcloud add deploy`
+straight to prod like a boss!
 
-- Start MySQL: `docker run -p 3306:3306 --name yimbysql -e MYSQL_ROOT_PASSWORD=password -d mysql:5.7`
-- Add a blank DB: `mysql -u root -ppassword -h 0.0.0.0 -P 3306 -e 'CREATE DATABASE dev'`
-- Start the GO server: `MYSQL_URI='root:password@tcp(0.0.0.0:3306)/dev' go run main.go`
-- To debug, you can grab container logs: `docker logs yimbysql`
-- To teardown: `docker rm --force yimbysql`
-
-I wish setting up GAE and Cloud SQL was more declarative / reproducible. I
-didn't hit any snags following various bits of documentation and using the
-console, so not saying much here. `gcloud app deploy`, then fiddle around with
-logs. The only trick is that app.yaml isn't under version control, because
-seemingly I have to copy the MySQL root password there? There's definitely a
-way to make IAM work out here, but it's not obvious from docs.
+Peek in at the activity: `gsutil ls -R gs://aorta-routes.appspot.com`
