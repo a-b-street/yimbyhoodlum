@@ -40,7 +40,7 @@ abuse mitigation somewhere.
 ## Development notes
 
 I haven't worked out how to glue the Go client library up to the same local
-credentials that `gsutil` uses, so no local development. `gcloud add deploy`
+credentials that `gsutil` uses, so no local development. `gcloud app deploy`
 straight to prod like a boss!
 
 Peek in at the activity: `gsutil ls -R gs://aorta-routes.appspot.com`

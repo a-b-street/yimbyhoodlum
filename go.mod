@@ -4,7 +4,7 @@ go 1.16
 
 require (
 	cloud.google.com/go v0.97.0 // indirect
-	cloud.google.com/go/storage v1.17.0 // indirect
+	cloud.google.com/go/storage v1.17.0
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	golang.org/x/net v0.0.0-20211005001312-d4b1ae081e3b // indirect
 	golang.org/x/oauth2 v0.0.0-20211005180243-6b3c2da341f1 // indirect

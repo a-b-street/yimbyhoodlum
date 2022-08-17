@@ -33,6 +33,8 @@ func main() {
 	// Versioning is useful in case we get fancier later, like actually having accounts
 	http.HandleFunc("/v1/get", get)
 	http.HandleFunc("/v1/create", create)
+	http.HandleFunc("/v1/get-ltn", getLTN)
+	http.HandleFunc("/v1/create-ltn", createLTN)
 	// TODO List
 
 	log.Printf("Serving on port %v", port)
@@ -128,4 +130,58 @@ type cityName struct {
 
 func (n *mapName) path() string {
 	return fmt.Sprintf("%v/%v/%v", n.City.Country, n.City.City, n.MapName)
+}
+
+func getLTN(resp http.ResponseWriter, req *http.Request) {
+	resp.Header().Set("Access-Control-Allow-Origin", "*")
+
+	values, ok := req.URL.Query()["id"]
+	if !ok || len(values[0]) < 1 {
+		http.Error(resp, "missing ID param", http.StatusBadRequest)
+		return
+	}
+	id := values[0]
+
+	obj := client.Bucket(bucket).Object(fmt.Sprintf("ltn_proposals/%v", id))
+	r, err := obj.NewReader(context.Background())
+	if err != nil {
+		http.Error(resp, fmt.Sprintf("new reader failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer r.Close()
+	if _, err := io.Copy(resp, r); err != nil {
+		http.Error(resp, fmt.Sprintf("reading failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+}
+
+func createLTN(resp http.ResponseWriter, req *http.Request) {
+	resp.Header().Set("Access-Control-Allow-Origin", "*")
+
+	var buffer bytes.Buffer
+	_, err := buffer.ReadFrom(req.Body)
+	if err != nil {
+		log.Printf("Couldn't read input in createLTN call: %v", err)
+		http.Error(resp, err.Error(), http.StatusBadRequest)
+		return
+	}
+	rawBytes := buffer.Bytes()
+
+	checksum := fmt.Sprintf("%x", md5.Sum(rawBytes))
+	// If the proposal already exists, overwriting it with the same thing will be idempotent.
+	obj := client.Bucket(bucket).Object(fmt.Sprintf("ltn_proposals/%v", checksum))
+	w := obj.NewWriter(context.Background())
+	if _, err := w.Write(rawBytes); err != nil {
+		http.Error(resp, fmt.Sprintf("writing failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if err := w.Close(); err != nil {
+		http.Error(resp, fmt.Sprintf("closing after write failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+	log.Printf("Uploaded new LTN proposal: %v", checksum)
+
+	// Return the checksum, so the user can share their masterpiece. (They
+	// can calculate it anyway with md5sum, but still useful.)
+	fmt.Fprintf(resp, "%v", checksum)
 }
